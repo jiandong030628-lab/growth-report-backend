@@ -1,18 +1,21 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
+from pydantic import BaseModel
 from typing import Dict, List
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Growth Report Aggregator")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+memory_store: Dict[str, List[dict]] = {}
 
-memory_store: Dict[str, List[Dict[str, str]]] = {}
+
+class AppendRequest(BaseModel):
+    batch_id: str
+    link: str
+    content: str
+
+
+class AggregateRequest(BaseModel):
+    batch_id: str
+    extra_notes: str = ""
 
 
 @app.get("/")
@@ -21,14 +24,10 @@ def health_check():
 
 
 @app.post("/append_growth_material")
-def append_growth_material(
-    batch_id: str = Query(...),
-    link: str = Query(...),
-    content: str = Query(...)
-):
-    batch_id = batch_id.strip()
-    link = link.strip()
-    content = content.strip()
+def append_growth_material(data: AppendRequest):
+    batch_id = data.batch_id.strip()
+    link = data.link.strip()
+    content = data.content.strip()
 
     if not batch_id:
         return {"ok": False, "error": "batch_id is required"}
@@ -42,12 +41,10 @@ def append_growth_material(
     if batch_id not in memory_store:
         memory_store[batch_id] = []
 
-    existing_links = {item["link"] for item in memory_store[batch_id]}
-    if link not in existing_links:
-        memory_store[batch_id].append({
-            "link": link,
-            "content": content
-        })
+    memory_store[batch_id].append({
+        "link": link,
+        "content": content
+    })
 
     return {
         "ok": True,
@@ -57,12 +54,9 @@ def append_growth_material(
 
 
 @app.post("/aggregate_growth_materials")
-def aggregate_growth_materials(
-    batch_id: str = Query(...),
-    extra_notes: str = Query("")
-):
-    batch_id = batch_id.strip()
-    extra_notes = extra_notes.strip()
+def aggregate_growth_materials(data: AggregateRequest):
+    batch_id = data.batch_id.strip()
+    extra_notes = data.extra_notes.strip()
 
     if not batch_id:
         return {"ok": False, "error": "batch_id is required"}
@@ -70,10 +64,7 @@ def aggregate_growth_materials(
     docs = memory_store.get(batch_id, [])
 
     if not docs:
-        return {
-            "ok": False,
-            "error": "no documents found for this batch_id"
-        }
+        return {"ok": False, "error": "no documents found for this batch_id"}
 
     merged_parts = []
     merged_parts.append(f"【批次ID】\n{batch_id}\n")
